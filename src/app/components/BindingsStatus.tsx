@@ -70,7 +70,14 @@ export default function BindingsStatus() {
     let active = true;
     (async () => {
       try {
-        const res = await fetch("api/binding-status", { cache: "no-store" });
+        // Prefix the mount path (exposed by next.config.ts via the `env`
+        // config) so the fetch hits /<mount>/api/binding-status even when
+        // the current page URL has no trailing slash. Next.js's `basePath`
+        // only auto-prefixes <Link>/<Image>/router, not fetch().
+        const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+        const res = await fetch(`${basePath}/api/binding-status`, {
+          cache: "no-store",
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = (await res.json()) as HealthcheckResponse;
         if (active) setData(json);
