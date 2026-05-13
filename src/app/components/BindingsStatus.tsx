@@ -2,6 +2,22 @@
 
 import { useEffect, useState } from "react";
 
+/**
+ * Join the app's base mount path with an API path, normalizing slashes
+ * regardless of whether `NEXT_PUBLIC_BASE_PATH` is "" or "/mount" (Next.js
+ * basePath must not have a trailing slash, but we strip defensively).
+ * Returns "/<mount>/<path>" or "/<path>" when no mount is configured.
+ *
+ * `NEXT_PUBLIC_BASE_PATH` is exposed by next.config.ts via the `env`
+ * config, sourced from COSMIC_MOUNT_PATH at build time. Next.js's own
+ * `basePath` only auto-prefixes <Link>/<Image>/router — not fetch().
+ */
+function buildAppUrl(path: string): string {
+  const base = (process.env.NEXT_PUBLIC_BASE_PATH ?? "").replace(/\/+$/, "");
+  const cleanPath = path.replace(/^\/+/, "");
+  return `${base}/${cleanPath}`;
+}
+
 type Status = "ok" | "error" | "loading";
 
 interface ServiceStatus {
@@ -70,12 +86,7 @@ export default function BindingsStatus() {
     let active = true;
     (async () => {
       try {
-        // Prefix the mount path (exposed by next.config.ts via the `env`
-        // config) so the fetch hits /<mount>/api/binding-status even when
-        // the current page URL has no trailing slash. Next.js's `basePath`
-        // only auto-prefixes <Link>/<Image>/router, not fetch().
-        const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-        const res = await fetch(`${basePath}/api/binding-status`, {
+        const res = await fetch(buildAppUrl("api/binding-status"), {
           cache: "no-store",
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
