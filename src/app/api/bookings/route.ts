@@ -1,14 +1,6 @@
-import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextResponse } from "next/server";
+import { getEnv, getSession, readSessionToken } from "../../../lib/auth";
 
-async function getDb(): Promise<D1Database | undefined> {
-  const ctx = await getCloudflareContext();
-  const env = ctx?.env as unknown as Record<string, unknown> | undefined;
-  return env?.DB as D1Database | undefined;
-}
-
-// Defensive: create the table on first use so the POC does not depend on
-// the production migration mechanism. Idempotent (IF NOT EXISTS).
 async function ensureTable(db: D1Database): Promise<void> {
   await db
     .prepare(
@@ -22,30 +14,37 @@ async function ensureTable(db: D1Database): Promise<void> {
     .run();
 }
 
-export async function GET() {
-  const db = await getDb();
-  if (!db) {
+export async function GET(request: Request) {
+  const session = await getSession(readSessionToken(request));
+  if (!session)
+    return NextResponse.json({ error: "non authentifié" }, { status: 401 });
+
+  const { DB } = await getEnv();
+  if (!DB)
     return NextResponse.json(
       { error: "DB binding not found" },
       { status: 500 },
     );
-  }
-  await ensureTable(db);
-  const { results } = await db
-    .prepare("SELECT id, name, slot, created_at FROM bookings ORDER BY id DESC")
-    .all();
+  await ensureTable(DB);
+
+  const { results } = await DB.prepare(
+    "SELECT id, name, slot, created_at FROM bookings ORDER BY id DESC",
+  ).all();
   return NextResponse.json({ bookings: results ?? [] });
 }
 
 export async function POST(request: Request) {
-  const db = await getDb();
-  if (!db) {
+  const session = await getSession(readSessionToken(request));
+  if (!session)
+    return NextResponse.json({ error: "non authentifié" }, { status: 401 });
+
+  const { DB } = await getEnv();
+  if (!DB)
     return NextResponse.json(
       { error: "DB binding not found" },
       { status: 500 },
     );
-  }
-  await ensureTable(db);
+  await ensureTable(DB);
 
   let body: { name?: string; slot?: string };
   try {
@@ -60,10 +59,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "name et slot requis" }, { status: 400 });
   }
 
-  await db
-    .prepare("INSERT INTO bookings (name, slot, created_at) VALUES (?, ?, ?)")
+  await DB.prepare(
+    "INSERT INTO bookings (name, slot, created_at) VALUES (?, ?, ?)",
+  )
     .bind(name, slot, Date.now())
     .run();
-
   return NextResponse.json({ ok: true }, { status: 201 });
 }
